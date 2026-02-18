@@ -1,0 +1,61 @@
+pipeline {
+    agent any
+
+    environment {
+        AWS_REGION = "ap-south-1"
+    }
+
+    stages {
+
+        stage('Terraform Init') {
+            steps {
+                sh 'terraform init'
+            }
+        }
+
+        stage('Terraform Apply') {
+            steps {
+                sh 'terraform apply -auto-approve'
+            }
+        }
+
+        stage('Wait for EC2 to Boot') {
+            steps {
+                echo "Waiting 2 minutes for server to start..."
+                sleep(time: 2, unit: 'MINUTES')
+            }
+        }
+
+        stage('Test Application') {
+            steps {
+                script {
+                    def public_ip = sh(
+                        script: "terraform output -raw public_ip",
+                        returnStdout: true
+                    ).trim()
+
+                    sh "curl http://${public_ip}:9000"
+                }
+            }
+        }
+
+        stage('Keep Instance Alive for Testing') {
+            steps {
+                echo "Keeping server alive for 5 minutes..."
+                sleep(time: 5, unit: 'MINUTES')
+            }
+        }
+
+        stage('Terraform Destroy') {
+            steps {
+                sh 'terraform destroy -auto-approve'
+            }
+        }
+    }
+
+    post {
+        always {
+            echo "Cleaning workspace..."
+        }
+    }
+}
